@@ -11,22 +11,8 @@ def SigmoidGFunc(x, alpha=3.):   # 带参数Sigmoid函数的导数
 def BinaryForFunc(x):   # 权值量化前向函数
     return torch.sign(x)
 
-def BinaryABackFunc(x, alpha=3.):   # 激活量化反向梯度函数
-    return 2 * SigmoidGFunc(x, alpha)
-
 def BinaryWBackFunc(x, alpha=3.):   # 权值量化反向梯度函数
     return 2 * SigmoidGFunc(x, alpha)
-
-class BinaryActivation(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, input):
-        ctx.save_for_backward(input)
-        return BinaryForFunc(input)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        input, = ctx.saved_tensors
-        return grad_output * BinaryABackFunc(input, alpha=3.)
     
 class BinaryWeight(torch.autograd.Function):
     @staticmethod
@@ -50,11 +36,8 @@ class BinaryLinear(nn.Linear):
         # scaling_factor = torch.mean(abs(w),dim=1,keepdim=True)
         # scaling_factor = scaling_factor.detach()
         # bw = scaling_factor * BinaryWeight.apply(w)
-
-        a = x
-        ba = BinaryActivation.apply(a)
         
-        return F.linear(ba, bw, self.bias)
+        return F.linear(x, bw, self.bias)
     
 class BinaryConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
@@ -69,11 +52,8 @@ class BinaryConv2d(nn.Conv2d):
         # scaling_factor = torch.mean(torch.mean(torch.mean(abs(w),dim=3,keepdim=True),dim=2,keepdim=True),dim=1,keepdim=True)
         # scaling_factor = scaling_factor.detach()
         # bw = scaling_factor * BinaryWeight.apply(w)
-
-        a = x
-        ba = BinaryActivation.apply(a)
     
-        return F.conv2d(ba, bw, self.bias, self.stride,
+        return F.conv2d(x, bw, self.bias, self.stride,
                     self.padding, self.dilation, self.groups)
 
 if __name__ == '__main__':
@@ -83,7 +63,6 @@ if __name__ == '__main__':
     plt.plot(x, SigmoidFunc(x), label = f'SigmoidFunc')
     plt.plot(x, SigmoidGFunc(x), label = f'SigmoidGFunc')
     plt.plot(x, BinaryForFunc(x), label = f'BinaryForFunc')
-    plt.plot(x, BinaryABackFunc(x), label = f'BinaryABackFunc')
     plt.plot(x, BinaryWBackFunc(x), label = f'BinaryWBackFunc')
     plt.legend()
     plt.show()
