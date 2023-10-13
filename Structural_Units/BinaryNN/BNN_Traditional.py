@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
+from typing import Union
+from torch import Tensor
 import torch.nn.functional as F
+from torch.nn.common_types import _size_2_t
+from spikingjelly.activation_based import base, functional
 
 def SigmoidFunc(x, alpha=3.):   # 带参数的Sigmoid函数
     return torch.sigmoid(alpha * x)
@@ -39,6 +43,11 @@ class BinaryLinear(nn.Linear):
         
         return F.linear(x, bw, self.bias)
     
+class layer_BinaryLinear(BinaryLinear, base.StepModule):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True, step_mode='s') -> None:
+        super().__init__(in_features, out_features, bias)
+        self.step_mode = step_mode
+    
 class BinaryConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
                  padding=0, dilation=1, groups=1, bias=False):
@@ -55,6 +64,36 @@ class BinaryConv2d(nn.Conv2d):
     
         return F.conv2d(x, bw, self.bias, self.stride,
                     self.padding, self.dilation, self.groups)
+
+class layer_BinaryConv2d(BinaryConv2d, base.StepModule):
+    def __init__(
+            self,
+            in_channels: int,
+            out_channels: int,
+            kernel_size: _size_2_t,
+            stride: _size_2_t = 1,
+            padding: Union[str, _size_2_t] = 0,
+            dilation: _size_2_t = 1,
+            groups: int = 1,
+            bias: bool = True,
+            step_mode: str = 's'
+    ) -> None:
+        super().__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        self.step_mode = step_mode
+
+    def extra_repr(self):
+        return super().extra_repr() + f', step_mode={self.step_mode}'
+
+    def forward(self, x: Tensor):
+        if self.step_mode == 's':
+            x = super().forward(x)
+
+        elif self.step_mode == 'm':
+            if x.dim() != 5:
+                raise ValueError(f'expected x with shape [T, N, C, H, W], but got x with shape {x.shape}!')
+            x = functional.seq_to_ann_forward(x, super().forward)
+
+        return x
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
